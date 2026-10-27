@@ -1,0 +1,6 @@
+{
+  "name": "Mobile Legends: Bang Bang — The Mythic Arena",
+  "description": "Official pre-registration portal and hero showcase for Mobile Legends: Bang Bang Mythic Arena. Experience zero-lag 15ms netcode, 120 FPS gameplay, and claim exclusive starter rewards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
