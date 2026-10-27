@@ -15,17 +15,22 @@ import { Footer } from './components/Footer';
 export default function App() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [initialEmail, setInitialEmail] = useState('');
+  const [selectedHero, setSelectedHero] = useState('Lesley');
 
-  const handleOpenRegister = (email?: string) => {
-    if (email) {
-      setInitialEmail(email);
+  const handleOpenRegister = (heroOrEmail?: string) => {
+    if (heroOrEmail) {
+      if (heroOrEmail.includes('@')) {
+        setInitialEmail(heroOrEmail);
+      } else {
+        setSelectedHero(heroOrEmail);
+      }
     }
     setIsRegisterOpen(true);
   };
 
   return (
     <div className="min-h-screen bg-[#111844] text-[#EAE0CF] font-sans selection:bg-[#4B5694] selection:text-[#EAE0CF]">
-      {/* Sticky Top Bar */}
+      {/* Sticky Top Bar with Google Workspace connection */}
       <Navbar onOpenRegister={handleOpenRegister} />
 
       {/* Main Content Sections */}
@@ -39,11 +44,12 @@ export default function App() {
       {/* Professional Footer */}
       <Footer />
 
-      {/* Registration & Starter Voucher Modal */}
+      {/* Registration & Starter Voucher Modal with Workspace Sync */}
       <RegistrationModal
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
         initialEmail={initialEmail}
+        selectedHero={selectedHero}
       />
     </div>
   );

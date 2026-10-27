@@ -4,29 +4,72 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Shield, Zap, Menu, X } from 'lucide-react';
+import { Volume2, VolumeX, Shield, Zap, Menu, X, Cloud, CheckCircle } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { googleSignIn, initAuth, logoutUser, getAccessToken } from '../utils/workspaceAuth';
+import { User } from 'firebase/auth';
 
 interface NavbarProps {
   onOpenRegister: (defaultEmail?: string) => void;
+  onWorkspaceConnected?: (token: string, user: User) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenRegister }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenRegister, onWorkspaceConnected }) => {
   const [muted, setMuted] = useState(sound.getMuted());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+
+    const unsubscribe = initAuth(
+      (u, token) => {
+        setUser(u);
+        if (onWorkspaceConnected) onWorkspaceConnected(token, u);
+      },
+      () => {
+        setUser(null);
+      }
+    );
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      unsubscribe();
+    };
+  }, [onWorkspaceConnected]);
 
   const handleToggleSound = () => {
     const nextMuted = sound.toggleMute();
     setMuted(nextMuted);
+  };
+
+  const handleGoogleWorkspaceLogin = async () => {
+    sound.playTacticalClick();
+    try {
+      setIsConnecting(true);
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        if (onWorkspaceConnected) onWorkspaceConnected(res.accessToken, res.user);
+        sound.playFanfare();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Google Workspace connection failed. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    sound.playTacticalClick();
+    await logoutUser();
+    setUser(null);
   };
 
   return (
@@ -52,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenRegister }) => {
               MYTHIC ARENA
             </span>
             <span className="text-[10px] text-[#7288AE] tracking-widest uppercase block">
-              MLBB OFFICIAL 2026
+              MLBB x GOOGLE WORKSPACE
             </span>
           </div>
         </a>
@@ -89,8 +132,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenRegister }) => {
           </a>
         </nav>
 
-        {/* Zone 3: Actions (Ping badge, Sound toggle, Register CTA) */}
-        <div className="flex items-center gap-4 shrink-0">
+        {/* Zone 3: Actions (Google Workspace Connect, Ping badge, Sound toggle, Register CTA) */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Google Workspace Account / Connect Button */}
+          {user ? (
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#161F55] border border-[#10B981]/50 text-xs text-[#EAE0CF]">
+              <CheckCircle className="w-4 h-4 text-[#10B981]" />
+              <span className="truncate max-w-[120px]">{user.displayName || user.email}</span>
+              <button
+                onClick={handleLogout}
+                className="text-[10px] text-[#7288AE] hover:text-[#EAE0CF] underline ml-2"
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleGoogleWorkspaceLogin}
+              disabled={isConnecting}
+              className="hidden xl:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#161F55] border border-[#4B5694] text-xs font-semibold text-[#EAE0CF] hover:border-[#EAE0CF] transition-colors"
+            >
+              <Cloud className="w-4 h-4 text-[#EAE0CF]" />
+              <span>{isConnecting ? 'Connecting...' : 'Connect Workspace (Drive/Sheets/Gmail)'}</span>
+            </button>
+          )}
+
           {/* Live Ping telemetry badge */}
           <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#161F55] border border-[#4B5694]/60 text-xs text-[#7288AE]">
             <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
@@ -132,6 +198,24 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenRegister }) => {
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden absolute top-full left-0 right-0 bg-[#111844]/98 border-b border-[#4B5694] p-6 shadow-2xl backdrop-blur-xl flex flex-col gap-4">
+          {!user ? (
+            <button
+              onClick={() => {
+                handleGoogleWorkspaceLogin();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full py-3 rounded-xl bg-[#161F55] border border-[#4B5694] text-xs font-bold text-[#EAE0CF] flex items-center justify-center gap-2"
+            >
+              <Cloud className="w-4 h-4" />
+              <span>Connect Google Workspace (Drive/Sheets/Gmail)</span>
+            </button>
+          ) : (
+            <div className="p-3 rounded-xl bg-[#161F55] border border-[#10B981] flex items-center justify-between text-xs text-[#EAE0CF]">
+              <span>Connected: {user.email}</span>
+              <button onClick={handleLogout} className="text-[#7288AE] underline">Disconnect</button>
+            </div>
+          )}
+
           <a
             href="#arena"
             onClick={() => {

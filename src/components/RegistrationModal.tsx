@@ -4,20 +4,23 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Copy, Shield, Zap, Sparkles, Download } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, CheckCircle2, Copy, Shield, Zap, Download, Cloud, Loader2 } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { getAccessToken, googleSignIn, syncToGoogleSheet, saveToGoogleDrive, sendConfirmationEmail } from '../utils/workspaceAuth';
 
 interface RegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialEmail?: string;
+  selectedHero?: string;
 }
 
 export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   isOpen,
   onClose,
-  initialEmail = ''
+  initialEmail = '',
+  selectedHero = 'Lesley'
 }) => {
   const [email, setEmail] = useState(initialEmail);
   const [playerTag, setPlayerTag] = useState('');
@@ -26,6 +29,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [agreed, setAgreed] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>('');
 
   useEffect(() => {
     if (initialEmail) {
@@ -35,11 +40,57 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !playerTag) return;
     sound.playFanfare();
     setSubmitted(true);
+
+    // Attempt Google Workspace integration sync if token available
+    const token = await getAccessToken();
+    if (token) {
+      try {
+        setIsSyncing(true);
+        setSyncStatus('Syncing pre-registration to Google Sheets...');
+        await syncToGoogleSheet(token, { playerTag, email, region, hero: selectedHero });
+
+        setSyncStatus('Saving Mythic Pass to Google Drive...');
+        await saveToGoogleDrive(token, { playerTag, email, voucher: 'MLBB-MYTHIC-2026-STARTER' });
+
+        setSyncStatus('Sending confirmation email via Gmail...');
+        await sendConfirmationEmail(token, email, 'MLBB-MYTHIC-2026-STARTER');
+
+        setSyncStatus('Successfully synced with Google Sheets, Drive, and Gmail!');
+      } catch (err) {
+        console.error('Workspace sync error:', err);
+        setSyncStatus('Enlisted locally! (Google Workspace sync optional/skipped)');
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      setSyncStatus('Enlisted successfully! (Connect Google Workspace to auto-sync with Sheets, Drive & Gmail)');
+    }
+  };
+
+  const handleConnectAndSync = async () => {
+    sound.playTacticalClick();
+    try {
+      setIsSyncing(true);
+      setSyncStatus('Authenticating with Google Workspace...');
+      const res = await googleSignIn();
+      if (res && res.accessToken) {
+        setSyncStatus('Syncing to Google Sheets & Drive...');
+        await syncToGoogleSheet(res.accessToken, { playerTag, email, region, hero: selectedHero });
+        await saveToGoogleDrive(res.accessToken, { playerTag, email, voucher: 'MLBB-MYTHIC-2026-STARTER' });
+        await sendConfirmationEmail(res.accessToken, email, 'MLBB-MYTHIC-2026-STARTER');
+        setSyncStatus('Connected & fully synced to Sheets, Drive & Gmail!');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('Google connection failed. Registration still saved.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleCopyCode = () => {
@@ -75,14 +126,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
           <div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#111844] border border-[#4B5694]/60 text-xs text-[#EAE0CF] w-fit mb-4">
               <Shield className="w-3.5 h-3.5 text-[#EAE0CF]" />
-              <span>OFFICIAL 2026 PRE-REGISTRATION PORTAL</span>
+              <span>GOOGLE WORKSPACE INTEGRATED PRE-REGISTRATION</span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#EAE0CF] font-display mb-2">
               CLAIM YOUR MYTHIC REWARDS
             </h2>
             <p className="text-xs sm:text-sm text-[#7288AE] mb-6">
-              Enlist now to secure the <strong className="text-[#EAE0CF]">Lesley Epic Hero Chest</strong>, 500 Battle Points, and guaranteed 15ms routing priority at launch.
+              Enlist to secure your <strong className="text-[#EAE0CF]">{selectedHero} Starter Chest</strong>. Auto-syncs with your Google Sheets, Drive, and Gmail.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -183,8 +234,32 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
             <h3 className="text-2xl font-bold text-[#EAE0CF] font-display mb-2">
               ENLISTMENT SUCCESSFUL!
             </h3>
-            <p className="text-xs text-[#7288AE] mb-6">
-              Your warrior profile is secured on the 15ms backbone node. Save your starter voucher code below:
+
+            {/* Workspace Sync Status */}
+            <div className="my-4 p-4 rounded-2xl bg-[#111844] border border-[#4B5694] text-xs">
+              {isSyncing ? (
+                <div className="flex items-center justify-center gap-2 text-[#EAE0CF]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#10B981]" />
+                  <span>{syncStatus}</span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[#10B981] font-semibold">{syncStatus}</span>
+                  {!syncStatus.includes('Fully synced') && (
+                    <button
+                      onClick={handleConnectAndSync}
+                      className="mt-2 py-2 px-3 rounded-xl bg-[#161F55] border border-[#4B5694] text-[#EAE0CF] hover:border-[#EAE0CF] flex items-center justify-center gap-2 transition-colors mx-auto"
+                    >
+                      <Cloud className="w-4 h-4" />
+                      <span>Connect Google Workspace to Sync to Sheets, Drive & Gmail</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-[#7288AE] mb-4">
+              Save your starter voucher code below:
             </p>
 
             <div className="p-4 rounded-2xl bg-[#111844] border border-[#4B5694] flex items-center justify-between gap-4 mb-6">
